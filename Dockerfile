@@ -1,0 +1,19 @@
+FROM golang
+
+RUN apt-get update \
+ && apt-get install -y cmake pkg-config \
+
+ && go get -d github.com/libgit2/git2go \
+ && cd $GOPATH/src/github.com/libgit2/git2go \
+ && git checkout -f next \
+ && git submodule update --init \
+ && make install \
+
+ && apt-get purge -y cmake pkg-config \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+
+ && go get github.com/splitsh/lite \
+ && go build -v -o /usr/local/bin/splitsh-lite github.com/splitsh/lite \
+
+ && rm -rf /go/*
+
