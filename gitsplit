@@ -1,0 +1,147 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import yaml
+import tempfile
+import subprocess
+import re
+import hashlib
+from multiprocessing.pool import ThreadPool
+
+CONFIG_FILE = ".gitsplit.yml"
+
+def get_config_file():
+    file_path = os.path.join(os.getcwd(), CONFIG_FILE)
+    if not os.path.exists(file_path):
+        raise Exception('Config fail not found at %s' % file_path)
+
+    with open(file_path, 'r') as f:
+        return yaml.load(f)
+
+def get_config():
+    config = {
+        'cache_dir': tempfile.mkdtemp(),
+        'project_dir': os.getcwd()
+    }
+    config.update(get_config_file())
+    config['cache_dir'] = os.path.join(resolve_path(config['cache_dir']), '.git')
+    config['project_dir'] = os.path.join(resolve_path(config['project_dir']), '.git')
+    if 'origins' not in config:
+        config['origins'] = ['.*']
+    for split in config['splits']:
+        if not isinstance(split['prefix'], list):
+            split['prefix'] = [split['prefix']]
+        if not isinstance(split['target'], list):
+            split['target'] = [split['target']]
+
+    return config
+
+
+def resolve_path(path):
+    if os.path.isabs(path):
+        return path
+    else:
+        return os.path.join(os.getcwd(), path)
+
+
+def init_workspace(config):
+    # Init cache repo
+    if not os.path.exists(config['cache_dir']):
+        execute(['git', 'init', os.path.dirname(config['cache_dir'])])
+    execute(['git', '--git-dir', config['cache_dir'], 'config', 'receive.denyCurrentBranch', 'ignore'])
+
+    # Init cache's remotes
+    remotes = execute(['git', '--git-dir', config['cache_dir'], 'remote']).splitlines()
+    known_remotes = []
+    for split in config['splits']:
+        for (target_index, target) in enumerate(split['target']):
+            remote = sha256(target)
+            known_remotes.append(remote)
+            if remote in remotes:
+                execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', remote, target])
+            else:
+                execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', sha256(target), target])
+    for remote in (x for x in remotes if x not in known_remotes):
+        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', remote])
+
+    # push code to cache
+    if 'cache' in execute(['git', '--git-dir', config['project_dir'], 'remote']).splitlines():
+        execute(['git', '--git-dir', config['project_dir'], 'remote', 'remove', 'cache'])
+    execute(['git', '--git-dir', config['project_dir'], 'remote', 'add', 'cache', 'file://%s' % config['cache_dir']])
+    execute(['git', '--git-dir', config['project_dir'], 'push', '--all', '-f', 'cache'])
+
+
+def split_project(config):
+    # build remote position cache
+    references = dict([(x.split(' ')[1], x.split(' ')[0]) for x in execute(['git', '--git-dir', config['cache_dir'], 'show-ref']).splitlines()])
+    remote_references = {}
+    for split in config['splits']:
+        for (target_index, target) in enumerate(split['target']):
+            remote = sha256(target)
+            remote_ref = 'refs/remotes/%s/' % remote;
+            remote_references[remote] = dict([(ref[len(remote_ref):], sha1) for (ref, sha1) in references.items() if ref.startswith(remote_ref)])
+
+
+    short_references = dict([(x[len('refs/remotes/origin/'):], x) for x in references.keys() if x.startswith('refs/remotes/origin/')])
+    short_references.update(dict([(x[len('refs/heads/'):], x) for x in references.keys() if x.startswith('refs/heads/')]))
+
+    push_arguments=[]
+    for origin in config['origins']:
+        find = False
+        re_origin = re.compile(origin)
+
+        for (reference, full_reference) in short_references.items():
+            find = True
+            if re_origin.match(reference):
+                for split in config['splits']:
+                    sys.stdout.write('Spliting "%s" for %s\n' % (reference, split['prefix']))
+
+                    args = []
+                    for prefix in split['prefix']:
+                        args += ['-prefix', prefix]
+                    sha1 = execute(['splitsh-lite', '-origin', full_reference, '-path', config['cache_dir']] + args)
+
+                    for (target_index, target) in enumerate(split['target']):
+                        push_arguments.append((target, sha1, reference, config, remote_references))
+        if not find:
+            raise Exception('No reference math the patern "%s" in (%s)' % (origin, short_references.keys()))
+
+    sys.stdout.write('Pushing branches\n')
+    pool = ThreadPool(5)
+    pool.map(push_branch, push_arguments)
+    pool.close()
+    pool.join()
+
+def sha256(text):
+    return hashlib.sha256(text).hexdigest()
+
+def push_branch(arguments):
+    (target, sha1, reference, config, remote_references) = arguments
+    remote = sha256(target)
+
+    if reference in remote_references[remote] and remote_references[remote][reference] == sha1:
+        sys.stdout.write('Already pushed "%s" into %s\n' % (reference, target))
+        return
+
+    sys.stdout.write('Pushing "%s" into %s\n' % (reference, target))
+
+    execute(['git', '--git-dir', config['cache_dir'], 'push', '-f', remote, '%s:refs/heads/%s' % (sha1, reference)])
+
+def execute(command):
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+    if p.returncode > 0:
+        error = 'Error in command "%s":\n\n%s' % (" ".join(command), stderr)
+
+        raise Exception(error)
+
+    return stdout.strip()
+
+def main():
+    config = get_config()
+    init_workspace(config)
+    split_project(config)
+
+if __name__ == '__main__':
+    main()

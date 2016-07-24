@@ -17,3 +17,15 @@ RUN apt-get update \
 
  && rm -rf /go/*
 
+RUN apt-get update \
+ && apt-get install -y python-pip \
+
+ && pip install pyyaml \
+
+ && apt-get purge -y python-pip \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+ADD gitsplit /usr/local/bin/gitsplit
+
+WORKDIR /srv
+CMD ["gitsplit"]
