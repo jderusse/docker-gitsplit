@@ -7,6 +7,8 @@ See [the official site](https://github.com/splitsh/lite) for more information ab
 Include a `.gitsplit.yml` file in the root of your repository.
 This section provides a brief overview of the configuration file and split process.
 
+Use env variable to inject your credential and manage authentication.
+
 Example .gitsplit.yml configuration:
 
 ```yaml
@@ -19,17 +21,17 @@ project_dir: /home/me/workspace/another_project
 # List of splits.
 splits:
   - prefix: "src/partA"
-    target: "git@github.com/my_company/project-partA.git"
+    target: "https://${GH_TOKEN}@github.com/my_company/project-partA.git"
   - prefix: "src/partB"
     target:
       # You can push the split to several repositories
-      - "git@github.com/my_company/project-partB.git"
-      - "git@github.com/my_company/project-partZ.git"
+      - "https://${GH_TOKEN}@github.com/my_company/project-partB.git"
+      - "https://${GH_TOKEN}@github.com/my_company/project-partZ.git"
   - prefix:
       # You can use several prefix in the split
       - "src/subTree/PartC"
       - "src/subTree/PartZ"
-    target: "git@github.com/my_company/project-partC.git"
+    target: "https://${GH_TOKEN}@github.com/my_company/project-partC.git"
 
 # List of references to split (defined as regexp)
 origins:
@@ -41,10 +43,10 @@ origins:
 # Split your repo manualy
 
 ```
-$ docker run --rm -ti -v $PWD:/srv jderusse/gitsplit
+$ docker run --rm -e GH_TOKEN -ti -v $PWD:/srv jderusse/gitsplit
 ```
 
-# Sample with drone.io (you have to handle remote repository authentication)
+# Sample with drone.io
 
 Beware, the container have to push on your splited repository.
 It could be a security issue. Use environments variables as defined in the official documentation
@@ -52,9 +54,9 @@ It could be a security issue. Use environments variables as defined in the offic
 ```yaml
 cache_dir: "/cache/gitsplit"
 splits:
-  "src/partA": "git@github.com/my_company/project-partA.git"
-  "src/partB": "git@github.com/my_company/project-partB.git"
-  "src/subTree/PartC": "git@github.com/my_company/project-partC.git"
+  "src/partA": "https://${GH_TOKEN}@github.com/my_company/project-partA.git"
+  "src/partB": "https://${GH_TOKEN}@github.com/my_company/project-partB.git"
+  "src/subTree/PartC": "https://${GH_TOKEN}@github.com/my_company/project-partC.git"
 
 origins:
   - ^master$

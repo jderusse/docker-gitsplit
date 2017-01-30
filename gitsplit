@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import io
 import sys
 import yaml
 import tempfile
@@ -16,8 +17,25 @@ def get_config_file():
     if not os.path.exists(file_path):
         raise Exception('Config fail not found at %s' % file_path)
 
+    content = ''
     with open(file_path, 'r') as f:
-        return yaml.load(f)
+        for line in f:
+            content+=expandvars(line)
+
+    return yaml.load(content)
+
+def expandvars(string, default=None, skip_escaped=False):
+    """Expand environment variables of form $var and ${var}.
+       If parameter 'skip_escaped' is True, all escaped variable references
+       (i.e. preceded by backslashes) are skipped.
+       Unknown variables are set to 'default'. If 'default' is None,
+       they are left unchanged.
+    """
+    def replace_var(m):
+        return os.environ.get(m.group(2) or m.group(1), m.group(0) if default is None else default)
+    reVar = r'\$(\w+|\{([^}]*)\})'
+    return re.sub(reVar, replace_var, string)
+
 
 def get_config():
     config = {
