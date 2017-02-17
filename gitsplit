@@ -80,6 +80,8 @@ def init_workspace(config):
                 execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', remote, target])
             else:
                 execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', sha256(target), target])
+            print('Fetching %s \n' % target)
+            execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', sha256(target)])
     for remote in (x for x in remotes if x not in known_remotes):
         execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', remote])
 
@@ -113,7 +115,7 @@ def split_project(config):
             find = True
             if re_origin.match(reference):
                 for split in config['splits']:
-                    sys.stdout.write('Spliting "%s" for %s\n' % (reference, split['prefix']))
+                    print('Spliting "%s" for %s\n' % (reference, split['prefix']))
 
                     args = []
                     for prefix in split['prefix']:
@@ -125,7 +127,7 @@ def split_project(config):
         if not find:
             raise Exception('No reference math the patern "%s" in (%s)' % (origin, short_references.keys()))
 
-    sys.stdout.write('Pushing branches\n')
+    print('Pushing branches\n')
     pool = ThreadPool(5)
     pool.map(push_branch, push_arguments)
     pool.close()
@@ -139,10 +141,10 @@ def push_branch(arguments):
     remote = sha256(target)
 
     if reference in remote_references[remote] and remote_references[remote][reference] == sha1:
-        sys.stdout.write('Already pushed "%s" into %s\n' % (reference, target))
+        print('Already pushed "%s" into %s\n' % (reference, target))
         return
 
-    sys.stdout.write('Pushing "%s" into %s\n' % (reference, target))
+    print('Pushing "%s" into %s\n' % (reference, target))
 
     execute(['git', '--git-dir', config['cache_dir'], 'push', '-f', remote, '%s:refs/heads/%s' % (sha1, reference)])
 
