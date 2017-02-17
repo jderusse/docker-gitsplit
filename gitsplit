@@ -86,15 +86,14 @@ def init_workspace(config):
 
     # pull code from project
     if 'origin' in execute(['git', '--git-dir', config['cache_dir'], 'remote']).splitlines():
-        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', 'origin'])
-    execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', 'origin', 'file://%s' % config['project_dir']])
-    execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p'])
-
+        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', 'origin', 'file://%s' % config['project_dir']])
+    else:
+        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', 'origin', 'file://%s' % config['project_dir']])
+    execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', 'origin'])
 
 def split_project(config):
     # build remote position cache
     references = dict([(x.split(' ')[1], x.split(' ')[0]) for x in execute(['git', '--git-dir', config['cache_dir'], 'show-ref']).splitlines()])
-
     remote_references = {}
     for split in config['splits']:
         for (target_index, target) in enumerate(split['target']):
