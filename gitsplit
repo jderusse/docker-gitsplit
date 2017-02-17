@@ -80,7 +80,7 @@ def init_workspace(config):
                 execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', remote, target])
             else:
                 execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', sha256(target), target])
-            print('Fetching %s \n' % target)
+            print('Fetching %s' % target)
             execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', sha256(target)])
     for remote in (x for x in remotes if x not in known_remotes):
         execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', remote])
@@ -115,7 +115,7 @@ def split_project(config):
             find = True
             if re_origin.match(reference):
                 for split in config['splits']:
-                    print('Spliting "%s" for %s\n' % (reference, split['prefix']))
+                    print('Spliting "%s" for %s' % (reference, split['prefix']))
 
                     args = []
                     for prefix in split['prefix']:
@@ -127,7 +127,7 @@ def split_project(config):
         if not find:
             raise Exception('No reference math the patern "%s" in (%s)' % (origin, short_references.keys()))
 
-    print('Pushing branches\n')
+    print('Pushing branches')
     pool = ThreadPool(5)
     pool.map(push_branch, push_arguments)
     pool.close()
@@ -141,10 +141,10 @@ def push_branch(arguments):
     remote = sha256(target)
 
     if reference in remote_references[remote] and remote_references[remote][reference] == sha1:
-        print('Already pushed "%s" into %s\n' % (reference, target))
+        print('Already pushed "%s" into %s' % (reference, target))
         return
 
-    print('Pushing "%s" into %s\n' % (reference, target))
+    print('Pushing "%s" into %s' % (reference, target))
 
     execute(['git', '--git-dir', config['cache_dir'], 'push', '-f', remote, '%s:refs/heads/%s' % (sha1, reference)])
 
@@ -152,7 +152,7 @@ def execute(command):
     p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
     if p.returncode > 0:
-        error = 'Error in command "%s":\n\n%s' % (" ".join(command), stderr)
+        error = 'Error in command "%s":%s' % (" ".join(command), stderr)
 
         raise Exception(error)
 

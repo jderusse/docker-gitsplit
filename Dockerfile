@@ -26,6 +26,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ADD gitsplit /usr/local/bin/gitsplit
+ENV PYTHONUNBUFFERED=0
 
 WORKDIR /srv
 CMD ["gitsplit"]
