@@ -67,11 +67,10 @@ def init_workspace(config):
     # Init cache repo
     if not os.path.exists(config['cache_dir']):
         execute(['git', 'init', os.path.dirname(config['cache_dir'])])
-    execute(['git', '--git-dir', config['cache_dir'], 'config', 'receive.denyCurrentBranch', 'ignore'])
 
     # Init cache's remotes
     remotes = execute(['git', '--git-dir', config['cache_dir'], 'remote']).splitlines()
-    known_remotes = []
+    known_remotes = ['origin']
     for split in config['splits']:
         for (target_index, target) in enumerate(split['target']):
             remote = sha256(target)
@@ -85,16 +84,17 @@ def init_workspace(config):
     for remote in (x for x in remotes if x not in known_remotes):
         execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', remote])
 
-    # push code to cache
-    if 'cache' in execute(['git', '--git-dir', config['project_dir'], 'remote']).splitlines():
-        execute(['git', '--git-dir', config['project_dir'], 'remote', 'remove', 'cache'])
-    execute(['git', '--git-dir', config['project_dir'], 'remote', 'add', 'cache', 'file://%s' % config['cache_dir']])
-    execute(['git', '--git-dir', config['project_dir'], 'push', '--all', '-f', 'cache'])
+    # pull code from project
+    if 'origin' in execute(['git', '--git-dir', config['cache_dir'], 'remote']).splitlines():
+        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', 'origin'])
+    execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', 'origin', 'file://%s' % config['project_dir']])
+    execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p'])
 
 
 def split_project(config):
     # build remote position cache
     references = dict([(x.split(' ')[1], x.split(' ')[0]) for x in execute(['git', '--git-dir', config['cache_dir'], 'show-ref']).splitlines()])
+
     remote_references = {}
     for split in config['splits']:
         for (target_index, target) in enumerate(split['target']):
@@ -102,15 +102,11 @@ def split_project(config):
             remote_ref = 'refs/remotes/%s/' % remote;
             remote_references[remote] = dict([(ref[len(remote_ref):], sha1) for (ref, sha1) in references.items() if ref.startswith(remote_ref)])
 
-
-    short_references = dict([(x[len('refs/remotes/origin/'):], x) for x in references.keys() if x.startswith('refs/remotes/origin/')])
-    short_references.update(dict([(x[len('refs/heads/'):], x) for x in references.keys() if x.startswith('refs/heads/')]))
-
+    short_references = dict([(x[len('refs/remote/sorigin/'):], x) for x in references.keys() if x.startswith('refs/remotes/origin/')])
     push_arguments=[]
     for origin in config['origins']:
         find = False
         re_origin = re.compile(origin)
-
         for (reference, full_reference) in short_references.items():
             find = True
             if re_origin.match(reference):
