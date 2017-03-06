@@ -42,8 +42,14 @@ origins:
 
 # Split your repo manualy
 
+With a github token:
 ```
-$ docker run --rm -e GH_TOKEN -ti -v $PWD:/srv jderusse/gitsplit
+$ docker run --rm -ti -e GH_TOKEN -v $PWD:/srv jderusse/gitsplit
+```
+
+With ssh agent:
+```
+$ docker run --rm -ti -e SSH_AUTH_SOCK=/ssh-agent -v $SSH_AUTH_SOCK:/ssh-agent -v $PWD:/srv jderusse/gitsplit
 ```
 
 # Sample with drone.io
