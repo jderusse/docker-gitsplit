@@ -23,6 +23,7 @@ RUN apt-get update \
  && pip install pyyaml \
 
  && apt-get purge -y python-pip \
+ && apt-get --purge autoremove \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ADD gitsplit /usr/local/bin/gitsplit
