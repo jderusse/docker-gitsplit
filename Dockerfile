@@ -1,6 +1,8 @@
 FROM golang
 
-RUN apt-get update \
+RUN echo "deb http://ftp.debian.org/debian jessie-backports main" > /etc/apt/sources.list.d/backports.list \
+ && apt-get update \
+ && apt-get install -y -t jessie-backports git \
  && apt-get install -y cmake pkg-config \
 
  && go get -d github.com/libgit2/git2go \
