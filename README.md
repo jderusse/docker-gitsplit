@@ -38,6 +38,7 @@ origins:
   - ^master$
   - ^develop$
   - ^feature/
+  - ^v\d+\.\d+\.\d+$
 ```
 
 # Split your repo manualy

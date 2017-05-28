@@ -74,13 +74,14 @@ def init_workspace(config):
     for split in config['splits']:
         for (target_index, target) in enumerate(split['target']):
             remote = sha256(target)
-            known_remotes.append(remote)
-            if remote in remotes:
-                execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', remote, target])
-            else:
-                execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', sha256(target), target])
+            if remote not in known_remotes:
+                known_remotes.append(remote)
+                if remote in remotes:
+                    execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', remote, target])
+                else:
+                    execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', remote, target])
             print('Fetching %s' % target)
-            execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', sha256(target)])
+            execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', remote])
     for remote in (x for x in remotes if x not in known_remotes):
         execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', remote])
 
@@ -90,58 +91,85 @@ def init_workspace(config):
     else:
         execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', 'origin', 'file://%s' % config['project_dir']])
     execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', 'origin'])
+    execute(['git', '--git-dir', config['cache_dir'], 'fetch', '--tags', 'origin'])
+
+remotes_references = {}
+def get_references(config, remote):
+    if not remote in remotes_references:
+        remotes_references[remote] = dict([(x.split('\t', 2)[-1], x.split('\t', 2)[0]) for x in execute(['git', '--git-dir', config['cache_dir'], 'ls-remote', remote]).splitlines()])
+    return remotes_references[remote]
+
+def get_reference_name(ref):
+    for prefix in ['refs/tags/', 'refs/heads/']:
+        if not ref.startswith(prefix):
+            continue
+        return ref[len(prefix):]
 
 def split_project(config):
     # build remote position cache
-    references = dict([(x.split(' ')[1], x.split(' ')[0]) for x in execute(['git', '--git-dir', config['cache_dir'], 'show-ref']).splitlines()])
-    remote_references = {}
-    for split in config['splits']:
-        for (target_index, target) in enumerate(split['target']):
-            remote = sha256(target)
-            remote_ref = 'refs/remotes/%s/' % remote;
-            remote_references[remote] = dict([(ref[len(remote_ref):], sha1) for (ref, sha1) in references.items() if ref.startswith(remote_ref)])
+    splits=[]
+    for ref_pattern in config['origins']:
+        splits += split_reference(config, ref_pattern)
+    splits = [x + (config,) for x in splits]
 
-    short_references = dict([(x[len('refs/remote/sorigin/'):], x) for x in references.keys() if x.startswith('refs/remotes/origin/')])
-    push_arguments=[]
-    for origin in config['origins']:
-        find = False
-        re_origin = re.compile(origin)
-        for (reference, full_reference) in short_references.items():
-            find = True
-            if re_origin.match(reference):
-                for split in config['splits']:
-                    print('Spliting "%s" for %s' % (reference, split['prefix']))
-
-                    args = []
-                    for prefix in split['prefix']:
-                        args += ['-prefix', prefix]
-                    sha1 = execute(['splitsh-lite', '-origin', full_reference, '-path', config['cache_dir']] + args)
-
-                    for (target_index, target) in enumerate(split['target']):
-                        push_arguments.append((target, sha1, reference, config, remote_references))
-        if not find:
-            raise Exception('No reference math the patern "%s" in (%s)' % (origin, short_references.keys()))
-
-    print('Pushing branches')
     pool = ThreadPool(5)
-    pool.map(push_branch, push_arguments)
+    pool.map(push_branch, splits)
     pool.close()
     pool.join()
+
+
+def split_reference(config, ref_pattern):
+    re_pattern = re.compile(ref_pattern)
+    splits = []
+    for (reference_ref, reference_sha1) in get_references(config, 'origin').items():
+        reference_name = get_reference_name(reference_ref)
+        if not reference_name:
+            continue
+        if not re_pattern.match(reference_name):
+            continue
+
+        splits_sha1 = split_reference_sha1(config, reference_sha1, reference_name)
+        splits += [x + (reference_ref,) for x in splits_sha1]
+
+    return splits
+
+def split_reference_sha1(config, reference_sha1, reference_name):
+    splits = []
+    for split in config['splits']:
+        print('Spliting "%s" for %s' % (reference_name, split['prefix']))
+
+        args = []
+        for prefix in split['prefix']:
+            args += ['-prefix', prefix]
+
+        temp_branch = 'refs/split/%s' % reference_sha1
+        try:
+            execute(['git', '--git-dir', config['cache_dir'], 'update-ref', temp_branch, reference_sha1])
+            split_sha1 = execute(['splitsh-lite', '-origin', temp_branch, '-path', config['cache_dir']] + args)
+        finally:
+            execute(['git', '--git-dir', config['cache_dir'], 'update-ref', '-d', temp_branch])
+
+        if not split_sha1:
+            continue
+
+        for (target_index, target) in enumerate(split['target']):
+            splits.append((target, split_sha1))
+    return splits
 
 def sha256(text):
     return hashlib.sha256(text).hexdigest()
 
 def push_branch(arguments):
-    (target, sha1, reference, config, remote_references) = arguments
+    (target, sha1, reference, config) = arguments
     remote = sha256(target)
 
-    if reference in remote_references[remote] and remote_references[remote][reference] == sha1:
+    remote_references = get_references(config, remote)
+    if reference in remotes_references[remote] and remotes_references[remote][reference] == sha1:
         print('Already pushed "%s" into %s' % (reference, target))
         return
 
     print('Pushing "%s" into %s' % (reference, target))
-
-    execute(['git', '--git-dir', config['cache_dir'], 'push', '-f', remote, '%s:refs/heads/%s' % (sha1, reference)])
+    execute(['git', '--git-dir', config['cache_dir'], 'push', '-f', remote, '%s:%s' % (sha1, reference)])
 
 def execute(command):
     p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
