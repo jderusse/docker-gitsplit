@@ -9,182 +9,259 @@ import subprocess
 import re
 import hashlib
 from multiprocessing.pool import ThreadPool
+from multiprocessing import Lock
 
 CONFIG_FILE = ".gitsplit.yml"
 
-def get_config_file():
-    file_path = os.path.join(os.getcwd(), CONFIG_FILE)
-    if not os.path.exists(file_path):
-        raise Exception('Config fail not found at %s' % file_path)
+class Utils:
+    def resolve_path(self, path):
+        if os.path.isabs(path):
+            return path
+        else:
+            return os.path.join(os.getcwd(), path)
 
-    content = ''
-    with open(file_path, 'r') as f:
-        for line in f:
-            content+=expandvars(line)
-
-    return yaml.load(content)
-
-def expandvars(string, default=None, skip_escaped=False):
-    """Expand environment variables of form $var and ${var}.
-       If parameter 'skip_escaped' is True, all escaped variable references
-       (i.e. preceded by backslashes) are skipped.
-       Unknown variables are set to 'default'. If 'default' is None,
-       they are left unchanged.
-    """
-    def replace_var(m):
-        return os.environ.get(m.group(2) or m.group(1), m.group(0) if default is None else default)
-    reVar = r'\$(\w+|\{([^}]*)\})'
-    return re.sub(reVar, replace_var, string)
+    def expandvars(self, string, default=None, skip_escaped=False):
+        """Expand environment variables of form $var and ${var}.
+           If parameter 'skip_escaped' is True, all escaped variable references
+           (i.e. preceded by backslashes) are skipped.
+           Unknown variables are set to 'default'. If 'default' is None,
+           they are left unchanged.
+        """
+        def replace_var(m):
+            return os.environ.get(m.group(2) or m.group(1), m.group(0) if default is None else default)
+        reVar = r'\$(\w+|\{([^}]*)\})'
+        return re.sub(reVar, replace_var, string)
 
 
-def get_config():
-    config = {
-        'cache_dir': tempfile.mkdtemp(),
-        'project_dir': os.getcwd()
+    def sha256(self, text):
+        return hashlib.sha256(text).hexdigest()
+
+class Config:
+    cache_dir = tempfile.mkdtemp()
+    project_dir = os.getcwd()
+    origins = []
+    splits = []
+
+    def __init__(self, utils):
+        self.utils = utils
+        self._normalize()
+
+    def load_from_file(self, file_path):
+        if not os.path.exists(file_path):
+            raise Exception('Config fail not found at %s' % file_path)
+
+        content = ''
+        with open(file_path, 'r') as f:
+            for line in f:
+                content+=self.utils.expandvars(line)
+
+        file_config = yaml.load(content)
+        for item in ('cache_dir', 'project_dir', 'origins', 'splits'):
+            if item in file_config:
+                setattr(self, item, file_config[item])
+        self._normalize()
+
+    def _normalize(self):
+        if not self.cache_dir.endswith('.git'):
+            self.cache_dir = os.path.join(self.utils.resolve_path(self.cache_dir), '.git')
+        if not self.project_dir.endswith('.git'):
+            self.project_dir = os.path.join(self.utils.resolve_path(self.project_dir), '.git')
+        if not self.origins:
+            self.origins = ['.*']
+        for split in self.splits:
+            if not isinstance(split['prefix'], list):
+                split['prefix'] = [split['prefix']]
+            if not isinstance(split['target'], list):
+                split['target'] = [split['target']]
+
+class Logger:
+    lock = Lock()
+    colors = {
+        'info': '1m',
+        'debug': '0m',
     }
-    config.update(get_config_file())
-    config['cache_dir'] = os.path.join(resolve_path(config['cache_dir']), '.git')
-    config['project_dir'] = os.path.join(resolve_path(config['project_dir']), '.git')
-    if 'origins' not in config:
-        config['origins'] = ['.*']
-    for split in config['splits']:
-        if not isinstance(split['prefix'], list):
-            split['prefix'] = [split['prefix']]
-        if not isinstance(split['target'], list):
-            split['target'] = [split['target']]
 
-    return config
-
-
-def resolve_path(path):
-    if os.path.isabs(path):
-        return path
-    else:
-        return os.path.join(os.getcwd(), path)
-
-
-def init_workspace(config):
-    # Init cache repo
-    if not os.path.exists(config['cache_dir']):
-        execute(['git', 'init', os.path.dirname(config['cache_dir'])])
-
-    # Init cache's remotes
-    remotes = execute(['git', '--git-dir', config['cache_dir'], 'remote']).splitlines()
-    known_remotes = ['origin']
-    for split in config['splits']:
-        for (target_index, target) in enumerate(split['target']):
-            remote = sha256(target)
-            if remote not in known_remotes:
-                known_remotes.append(remote)
-                if remote in remotes:
-                    execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', remote, target])
-                else:
-                    execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', remote, target])
-            print('Fetching %s' % target)
-            execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', remote])
-    for remote in (x for x in remotes if x not in known_remotes):
-        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'remove', remote])
-
-    # pull code from project
-    if 'origin' in execute(['git', '--git-dir', config['cache_dir'], 'remote']).splitlines():
-        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'set-url', 'origin', 'file://%s' % config['project_dir']])
-    else:
-        execute(['git', '--git-dir', config['cache_dir'], 'remote', 'add', 'origin', 'file://%s' % config['project_dir']])
-    execute(['git', '--git-dir', config['cache_dir'], 'fetch', '-p', 'origin'])
-    execute(['git', '--git-dir', config['cache_dir'], 'fetch', '--tags', 'origin'])
-
-remotes_references = {}
-def get_references(config, remote):
-    if not remote in remotes_references:
-        remotes_references[remote] = dict([(x.split('\t', 2)[-1], x.split('\t', 2)[0]) for x in execute(['git', '--git-dir', config['cache_dir'], 'ls-remote', remote]).splitlines()])
-    return remotes_references[remote]
-
-def get_reference_name(ref):
-    for prefix in ['refs/tags/', 'refs/heads/']:
-        if not ref.startswith(prefix):
-            continue
-        return ref[len(prefix):]
-
-def split_project(config):
-    # build remote position cache
-    splits=[]
-    for ref_pattern in config['origins']:
-        splits += split_reference(config, ref_pattern)
-    splits = [x + (config,) for x in splits]
-
-    pool = ThreadPool(5)
-    pool.map(push_branch, splits)
-    pool.close()
-    pool.join()
-
-
-def split_reference(config, ref_pattern):
-    re_pattern = re.compile(ref_pattern)
-    splits = []
-    for (reference_ref, reference_sha1) in get_references(config, 'origin').items():
-        reference_name = get_reference_name(reference_ref)
-        if not reference_name:
-            continue
-        if not re_pattern.match(reference_name):
-            continue
-
-        splits_sha1 = split_reference_sha1(config, reference_sha1, reference_name)
-        splits += [x + (reference_ref,) for x in splits_sha1]
-
-    return splits
-
-def split_reference_sha1(config, reference_sha1, reference_name):
-    splits = []
-    for split in config['splits']:
-        print('Spliting "%s" for %s' % (reference_name, split['prefix']))
-
-        args = []
-        for prefix in split['prefix']:
-            args += ['-prefix', prefix]
-
-        temp_branch = 'refs/split/%s' % reference_sha1
+    def log(self, level, message):
+        message = message.replace('<comment>', '\033[32m').replace('</>', '\033[0m\033[%s' % self.colors[level])
         try:
-            execute(['git', '--git-dir', config['cache_dir'], 'update-ref', temp_branch, reference_sha1])
-            split_sha1 = execute(['splitsh-lite', '-origin', temp_branch, '-path', config['cache_dir']] + args)
+            self.lock.acquire()
+            print('\033[%s%s\033[0m' % (self.colors[level], message))
         finally:
-            execute(['git', '--git-dir', config['cache_dir'], 'update-ref', '-d', temp_branch])
+            self.lock.release()
 
-        if not split_sha1:
-            continue
+    def info(self, message):
+        self.log('info', message)
 
-        for (target_index, target) in enumerate(split['target']):
-            splits.append((target, split_sha1))
-    return splits
+    def debug(self, message):
+        self.log('debug', message)
 
-def sha256(text):
-    return hashlib.sha256(text).hexdigest()
 
-def push_branch(arguments):
-    (target, sha1, reference, config) = arguments
-    remote = sha256(target)
+class Process:
+    def execute(self, command):
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = p.communicate()
+        if p.returncode > 0:
+            error = 'Error in command "%s":%s' % (" ".join(command), stderr)
 
-    remote_references = get_references(config, remote)
-    if reference in remotes_references[remote] and remotes_references[remote][reference] == sha1:
-        print('Already pushed "%s" into %s' % (reference, target))
-        return
+            raise Exception(error)
 
-    print('Pushing "%s" into %s' % (reference, target))
-    execute(['git', '--git-dir', config['cache_dir'], 'push', '-f', remote, '%s:%s' % (sha1, reference)])
+        return stdout.strip()
+class Git:
+    def __init__(self, git_dir, process):
+        self.git_dir = git_dir
+        self.process = process
 
-def execute(command):
-    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate()
-    if p.returncode > 0:
-        error = 'Error in command "%s":%s' % (" ".join(command), stderr)
+    def call(self,  arguments):
+        command = ['git', '--git-dir', self.git_dir] + arguments
+        return self.process.execute(command)
 
-        raise Exception(error)
+class Splitter:
+    lock = Lock()
 
-    return stdout.strip()
+    def __init__(self, config, process, git, utils, logger):
+        self.config = config
+        self.git = git
+        self.process = process
+        self.utils = utils
+        self.logger = logger
+
+    def split(self):
+        self._init_workspace()
+        self._split_project()
+
+    def _init_workspace(self):
+        # Init cache repo
+        if not os.path.exists(self.config.cache_dir):
+            self.process.execute(['git', 'init', os.path.dirname(self.config.cache_dir)])
+
+        # Init cache's remotes
+        remotes = self.git.call(['remote', ]).splitlines()
+        known_remotes = ['origin']
+        for split in self.config.splits:
+            for target in split['target']:
+                remote = self.utils.sha256(target)
+                if remote not in known_remotes:
+                    known_remotes.append(remote)
+                    if remote in remotes:
+                        self.git.call(['remote', 'set-url', remote, target])
+                    else:
+                        self.git.call(['remote', 'add', remote, target])
+                self.logger.info('Fetching <comment>%s</>' % target)
+                self.git.call(['fetch', '-p', remote])
+        for remote in (x for x in remotes if x not in known_remotes):
+            self.git.call(['remote', 'remove', remote])
+
+        # pull code from project
+        if 'origin' in self.git.call(['remote', ]).splitlines():
+            self.git.call(['remote', 'set-url', 'origin', 'file://%s' % self.config.project_dir])
+        else:
+            self.git.call(['remote', 'add', 'origin', 'file://%s' % self.config.project_dir])
+        self.git.call(['fetch', '-p', 'origin'])
+        self.git.call(['fetch', '--tags', 'origin'])
+
+    def _split_project(self):
+        pool = ThreadPool(8)
+        pool.map(self._split_reference, self._get_split_references())
+        pool.close()
+        pool.join()
+
+    def _get_split_references(self):
+        for ref_pattern in self.config.origins:
+            re_pattern = re.compile(ref_pattern)
+            for (reference_ref, reference_sha1) in self._get_references('origin').items():
+                reference_name = self._get_reference_name(reference_ref)
+                if not reference_name:
+                    continue
+                if not re_pattern.match(reference_name):
+                    continue
+
+                yield (reference_sha1, reference_ref)
+
+    def _split_reference(self, arguments):
+        (reference_sha1, reference_ref) = arguments
+
+        for split in self.config.splits:
+            flag_source = 'refs/split-flag/source-%s-%s' % (self.utils.sha256(reference_ref), self.utils.sha256('-'.join(split['prefix'])))
+            flag_target = 'refs/split-flag/target-%s-%s' % (self.utils.sha256(reference_ref), self.utils.sha256('-'.join(split['prefix'])))
+
+            last_split = self._get_local_reference_sha1(flag_source)
+            if last_split ==  reference_sha1:
+                self.logger.debug('Already splitted <comment>%s</> for <comment>%s</>' % (reference_ref, ', '.join(split['prefix'])))
+                split_sha1 = self._get_local_reference_sha1(flag_target)
+            else:
+                self.logger.info('Spliting <comment>%s</> for <comment>%s</>' % (reference_ref, ', '.join(split['prefix'])))
+
+                args = []
+                for prefix in split['prefix']:
+                    args += ['-prefix', prefix]
+
+                temp_branch = 'refs/split/%s' % reference_ref
+                try:
+                    self.git.call(['update-ref', temp_branch, reference_sha1])
+                    self.lock.acquire()
+                    split_sha1 = self.process.execute(['splitsh-lite', '-origin', temp_branch, '-path', self.config.cache_dir] + args)
+                finally:
+                    self.git.call(['update-ref', '-d', temp_branch])
+                    self.lock.release()
+
+                if not split_sha1:
+                    self.git.call(['update-ref', flag_source, reference_sha1])
+                else:
+                    self.git.call(['update-ref', flag_target, split_sha1])
+                    self.git.call(['update-ref', flag_source, reference_sha1])
+
+            if not split_sha1:
+                continue
+
+            for target in split['target']:
+                self._push_branch(split_sha1, reference_ref, target)
+
+    remotes_references = {}
+    def _get_references(self, remote):
+        if not remote in self.remotes_references:
+            self.remotes_references[remote] = dict([(x.split('\t', 2)[-1], x.split('\t', 2)[0]) for x in self.git.call(['ls-remote', remote]).splitlines()])
+        return self.remotes_references[remote]
+
+    local_references = None
+    def _get_local_reference_sha1(self, reference):
+        if self.local_references is None:
+            self.local_references = dict([(x.split(' ', 2)[-1], x.split(' ', 2)[0]) for x in self.git.call(['show-ref']).splitlines()])
+
+        if reference in self.local_references:
+            return self.local_references[reference]
+
+        return None
+
+    def _get_reference_name(self, ref):
+        for prefix in ['refs/tags/', 'refs/heads/']:
+            if not ref.startswith(prefix):
+                continue
+            return ref[len(prefix):]
+
+    def _push_branch(self, sha1, reference, target):
+        remote = self.utils.sha256(target)
+
+        remote_references = self._get_references(remote)
+        if reference in remote_references and remote_references[reference] == sha1:
+            self.logger.debug('Already pushed <comment>%s</> into <comment>%s</>' % (reference, target))
+            return
+
+        self.logger.info('Pushing <comment>%s</> into <comment>%s</>' % (reference, target))
+        self.git.call(['push', '-f', remote, '%s:%s' % (sha1, reference)])
+
 
 def main():
-    config = get_config()
-    init_workspace(config)
-    split_project(config)
+    logger = Logger()
+    utils = Utils()
+    process = Process()
+
+    config = Config(utils)
+    config.load_from_file(os.path.join(os.getcwd(), CONFIG_FILE))
+
+    git = Git(config.cache_dir, process)
+
+    splitter = Splitter(config, process, git, utils, logger)
+    splitter.split()
 
 if __name__ == '__main__':
     main()
