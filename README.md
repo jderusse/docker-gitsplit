@@ -13,7 +13,7 @@ Example .gitsplit.yml configuration:
 
 ```yaml
 # Used to speed up the split over time by reusing git's objects
-cache_dir: "/var/lib/gitsplit/my_project"
+cache_dir: "/cache/gitsplit"
 
 # Path to the repository to split (default = current path)
 project_dir: /home/me/workspace/another_project
@@ -45,12 +45,12 @@ origins:
 
 With a github token:
 ```
-$ docker run --rm -ti -e GH_TOKEN -v $PWD:/srv jderusse/gitsplit
+$ docker run --rm -ti -e GH_TOKEN -v /cache:/cache/gitsplit -v $PWD:/srv jderusse/gitsplit
 ```
 
 With ssh agent:
 ```
-$ docker run --rm -ti -e SSH_AUTH_SOCK=/ssh-agent -v $SSH_AUTH_SOCK:/ssh-agent -v $PWD:/srv jderusse/gitsplit
+$ docker run --rm -ti -e SSH_AUTH_SOCK=/ssh-agent -v $SSH_AUTH_SOCK:/ssh-agent -v /cache:/cache/gitsplit -v $PWD:/srv jderusse/gitsplit
 ```
 
 # Sample with drone.io

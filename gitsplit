@@ -53,7 +53,7 @@ class Config:
         content = ''
         with open(file_path, 'r') as f:
             for line in f:
-                content+=self.utils.expandvars(line)
+                content+=line
 
         file_config = yaml.load(content)
         for item in ('cache_dir', 'project_dir', 'origins', 'splits'):
@@ -63,9 +63,9 @@ class Config:
 
     def _normalize(self):
         if not self.cache_dir.endswith('.git'):
-            self.cache_dir = os.path.join(self.utils.resolve_path(self.cache_dir), '.git')
+            self.cache_dir = os.path.join(self.utils.resolve_path(self.utils.expandvars(self.cache_dir)), '.git')
         if not self.project_dir.endswith('.git'):
-            self.project_dir = os.path.join(self.utils.resolve_path(self.project_dir), '.git')
+            self.project_dir = os.path.join(self.utils.resolve_path(self.utils.expandvars(self.project_dir)), '.git')
         if not self.origins:
             self.origins = ['.*']
         for split in self.splits:
@@ -142,10 +142,11 @@ class Splitter:
                 remote = self.utils.sha256(target)
                 if remote not in known_remotes:
                     known_remotes.append(remote)
+                    target_url = self.utils.expandvars(target)
                     if remote in remotes:
-                        self.git.call(['remote', 'set-url', remote, target])
+                        self.git.call(['remote', 'set-url', remote, target_url])
                     else:
-                        self.git.call(['remote', 'add', remote, target])
+                        self.git.call(['remote', 'add', remote, target_url])
                 self.logger.info('Fetching <comment>%s</>' % target)
                 self.git.call(['fetch', '-p', remote])
         for remote in (x for x in remotes if x not in known_remotes):
