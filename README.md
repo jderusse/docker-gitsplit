@@ -87,3 +87,38 @@ pipeline:
       - git fetch
       - gitsplit
 ```
+
+```yaml
+# .travis.yml
+sudo: required
+services:
+  - docker
+cache:
+  directories:
+    - /cache/gitsplit
+install:
+  - docker pull jderusse/gitsplit
+
+  # update local repository. Because travis fetch a shallow copy
+  - git config remote.origin.fetch "+refs/*:refs/*"
+  - git config remote.origin.mirror true
+  - git fetch --unshallow
+
+script:
+  - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit
+```
+
+```yaml
+# .gitlabci.yml
+stages:
+  - split
+
+services:
+  - docker
+
+split:
+  stage: split
+  script:
+    - docker pull jderusse/gitsplit
+    - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit
+```
