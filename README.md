@@ -113,12 +113,23 @@ script:
 stages:
   - split
 
-services:
-  - docker
-
 split:
+  image: jderusse/gitsplit
   stage: split
+  cache:
+    key: "$CI_JOB_NAME/$CI_COMMIT_REF_NAME"
+    paths:
+      - /cache/gitsplit
+  variables:
+    GIT_STRATEGY: clone
+  before_script:
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$SSH_PRIVATE_KEY")
+    - ssh-add -l
   script:
-    - docker pull jderusse/gitsplit
-    - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit
+    - git fetch --all
+    - git checkout master
+    - gitsplit
 ```

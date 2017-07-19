@@ -190,7 +190,7 @@ class Splitter:
                 self.logger.debug('Already splitted <comment>%s</> for <comment>%s</>' % (reference_ref, ', '.join(split['prefix'])))
                 split_sha1 = self._get_local_reference_sha1(flag_target)
             else:
-                self.logger.info('Spliting <comment>%s</> for <comment>%s</>' % (reference_ref, ', '.join(split['prefix'])))
+                self.logger.info('Splitting <comment>%s</> for <comment>%s</>' % (reference_ref, ', '.join(split['prefix'])))
 
                 args = []
                 for prefix in split['prefix']:
