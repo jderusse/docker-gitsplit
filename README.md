@@ -109,7 +109,7 @@ script:
 ```
 
 ```yaml
-# .gitlabci.yml
+# .gitlabci.yml with Docker runners
 stages:
   - split
 
@@ -125,11 +125,12 @@ split:
   before_script:
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
-    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - 'echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - ssh-add <(echo "$SSH_PRIVATE_KEY")
     - ssh-add -l
   script:
-    - git fetch --all
-    - git checkout master
+    - git config remote.origin.fetch "+refs/*:refs/*"
+    - git config remote.origin.mirror true
+    - git fetch
     - gitsplit
 ```
