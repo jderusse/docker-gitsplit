@@ -8,6 +8,7 @@ import tempfile
 import subprocess
 import re
 import hashlib
+import argparse
 from multiprocessing.pool import ThreadPool
 from multiprocessing import Lock
 
@@ -125,9 +126,9 @@ class Splitter:
         self.utils = utils
         self.logger = logger
 
-    def split(self):
+    def split(self, whitelist_references):
         self._init_workspace()
-        self._split_project()
+        self._split_project(whitelist_references)
 
     def _init_workspace(self):
         # Init cache repo
@@ -160,18 +161,20 @@ class Splitter:
         self.git.call(['fetch', '-p', 'origin'])
         self.git.call(['fetch', '--tags', 'origin'])
 
-    def _split_project(self):
+    def _split_project(self, whitelist_references):
         pool = ThreadPool(8)
-        pool.map(self._split_reference, self._get_split_references())
+        pool.map(self._split_reference, self._get_split_references(whitelist_references))
         pool.close()
         pool.join()
 
-    def _get_split_references(self):
+    def _get_split_references(self, whitelist_references):
         for ref_pattern in self.config.origins:
             re_pattern = re.compile(ref_pattern)
             for (reference_ref, reference_sha1) in self._get_references('origin').items():
                 reference_name = self._get_reference_name(reference_ref)
                 if not reference_name:
+                    continue
+                if whitelist_references and reference_name not in whitelist_references:
                     continue
                 if not re_pattern.match(reference_name):
                     continue
@@ -262,7 +265,13 @@ def main():
     git = Git(config.cache_dir, process)
 
     splitter = Splitter(config, process, git, utils, logger)
-    splitter.split()
+
+    parser = argparse.ArgumentParser(description='Split git repository.')
+    parser.add_argument('--ref', dest='references', metavar='BRANCH_OR_TAG', type=str, nargs='*',
+                       help='git references (branch or tag) to process. When not set, process every references')
+
+    args = parser.parse_args()
+    splitter.split(args.references)
 
 if __name__ == '__main__':
     main()
