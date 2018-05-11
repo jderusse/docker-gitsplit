@@ -1,26 +1,36 @@
-FROM python:2-slim
+FROM golang:alpine AS build
 
-ENV SPLITSH_VERSION=1.0.1
+RUN apk add --no-cache \
+        git
 
-RUN apt-get update \
- && apt-get install -y curl \
+RUN go get -d github.com/libgit2/git2go
+RUN cd $GOPATH/src/github.com/libgit2/git2go \
+ && git checkout next \
+ && git submodule update --init
 
- && curl -L https://github.com/splitsh/lite/releases/download/v${SPLITSH_VERSION}/lite_linux_amd64.tar.gz|tar zxf - && mv ./splitsh-lite /bin \
+RUN apk add --no-cache \
+        make\
+        cmake \
+        g++
+RUN cd $GOPATH/src/github.com/libgit2/git2go \
+ && make install
 
- && apt-get purge --auto-remove -y curl \
- && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN go get github.com/splitsh/lite
+RUN go build -o splitsh-lite github.com/splitsh/lite
 
-RUN echo "deb http://ftp.debian.org/debian jessie-backports main" > /etc/apt/sources.list.d/backports.list \
- && apt-get update \
- && apt-get install -y -t jessie-backports \
+# ==================================================
+
+FROM python:3-alpine
+
+RUN apk add --no-cache \
         git \
-
- && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+        openssh-client
 
 RUN pip install pyyaml
-
-ADD gitsplit /usr/local/bin/gitsplit
 ENV PYTHONUNBUFFERED=0
+
+COPY --from=build /go/splitsh-lite /bin/splitsh-lite
+COPY gitsplit /bin/gitsplit
 
 WORKDIR /srv
 CMD ["gitsplit"]
