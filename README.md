@@ -109,7 +109,7 @@ script:
 ```
 
 ```yaml
-# .gitlabci.yml with Docker runners
+# .gitlab-ci.yml with Docker runners
 stages:
   - split
 
@@ -117,16 +117,17 @@ split:
   image: jderusse/gitsplit
   stage: split
   cache:
-    key: "$CI_JOB_NAME/$CI_COMMIT_REF_NAME"
+    key: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
     paths:
-      - /cache/gitsplit
+      - $CI_PROJECT_DIR/cache/gitsplit
   variables:
     GIT_STRATEGY: clone
   before_script:
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
-    - 'echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-    - ssh-add <(echo "$SSH_PRIVATE_KEY")
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null
     - ssh-add -l
   script:
     - git config remote.origin.fetch "+refs/*:refs/*"
