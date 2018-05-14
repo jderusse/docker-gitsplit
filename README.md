@@ -130,7 +130,7 @@ install:
   - git fetch --unshallow
 
 script:
-  - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit
+  - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit --ref "${TRAVIS_BRANCH}"
 ```
 
 # Sample with GitLab CI/CD
@@ -181,5 +181,5 @@ split:
     - git config remote.origin.fetch "+refs/*:refs/*"
     - git config remote.origin.mirror true
     - git fetch
-    - gitsplit
+    - gitsplit --ref "${CI_COMMIT_REF_NAME}"
 ```
