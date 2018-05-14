@@ -35,7 +35,7 @@ class Utils:
 
 
     def sha256(self, text):
-        return hashlib.sha256(text).hexdigest()
+        return hashlib.sha256(text.encode()).hexdigest()
 
 class Config:
     cache_dir = tempfile.mkdtemp()
@@ -56,7 +56,7 @@ class Config:
             for line in f:
                 content+=line
 
-        file_config = yaml.load(content)
+        file_config = yaml.safe_load(content)
         for item in ('cache_dir', 'project_dir', 'origins', 'splits'):
             if item in file_config:
                 setattr(self, item, file_config[item])
@@ -102,11 +102,12 @@ class Process:
         p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, stderr = p.communicate()
         if p.returncode > 0:
-            error = 'Error in command "%s":%s' % (" ".join(command), stderr)
+            error = 'Error in command "%s":%s' % (" ".join(command), stderr.decode())
 
             raise Exception(error)
 
-        return stdout.strip()
+        return stdout.decode().strip()
+
 class Git:
     def __init__(self, git_dir, process):
         self.git_dir = git_dir
@@ -114,6 +115,7 @@ class Git:
 
     def call(self,  arguments):
         command = ['git', '--git-dir', self.git_dir] + arguments
+
         return self.process.execute(command)
 
 class Splitter:
