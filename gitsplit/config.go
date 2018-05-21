@@ -130,11 +130,11 @@ func NewConfigFromFile(filePath string) (*Config, error) {
 
 	yamlFile, err := ioutil.ReadFile(utils.ResolvePath(filePath))
 	if err != nil {
-		return nil, errors.Wrap(err, "Fail to read config file")
+		return nil, errors.Wrap(err, "failed to read config file")
 	}
 
 	if err = yaml.Unmarshal(yamlFile, &config); err != nil {
-		return nil, errors.Wrap(err, "Fail to load config file")
+		return nil, errors.Wrap(err, "failed to load config file")
 	}
 
 	return config, nil

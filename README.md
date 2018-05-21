@@ -15,18 +15,18 @@ Example `.gitsplit.yml` configuration:
 
 ```yaml
 # Path to a cache directory Used to speed up the split over time by reusing git's objects
-cache_dir: "/cache/gitsplit"
-# cache_dir: "file:///cache/gitsplit"
-# cache_dir: "https://${GH_TOKEN}@github.com/my_company/project-cache.git"
-# cache_dir: "git@gitlab.com:my_company/project-cache.git"
+cache_url: "/cache/gitsplit"
+# cache_url: "file:///cache/gitsplit"
+# cache_url: "https://${GH_TOKEN}@github.com/my_company/project-cache.git"
+# cache_url: "git@gitlab.com:my_company/project-cache.git"
 
 # Path to the repository to split (default = current path)
-# project_dir: /home/me/workspace/another_project
-# project_dir: ~/workspace/another_project
-# project_dir: ../another_project
-# project_dir: file://~/workspace/another_project
-# project_dir: "https://${GH_TOKEN}@github.com/my_company/project.git"
-# project_dir: "git@gitlab.com:my_company/project.git"
+# project_url: /home/me/workspace/another_project
+# project_url: ~/workspace/another_project
+# project_url: ../another_project
+# project_url: file://~/workspace/another_project
+# project_url: "https://${GH_TOKEN}@github.com/my_company/project.git"
+# project_url: "git@gitlab.com:my_company/project.git"
 
 # List of splits.
 splits:
@@ -70,7 +70,7 @@ It could be a security issue. Use environments variables as defined in the offic
 
 ```yaml
 # .gitsplit.yml
-cache_dir: "/cache/gitsplit"
+cache_url: "/cache/gitsplit"
 splits:
   - prefix: "src/partA"
     target: "https://${GH_TOKEN}@github.com/my_company/project-partA.git"
@@ -103,7 +103,7 @@ It could be a security issue. Use environments variables as defined in the offic
 
 ```yaml
 # .gitsplit.yml
-cache_dir: "/cache/gitsplit"
+cache_url: "/cache/gitsplit"
 splits:
   - prefix: "src/partA"
     target: "https://${GH_TOKEN}@github.com/my_company/project-partA.git"
@@ -128,7 +128,7 @@ install:
   - git fetch --prune --unshallow || true
 
 script:
-  - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit --ref "${TRAVIS_BRANCH}"
+  - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit gitsplit --ref "${TRAVIS_BRANCH}"
 ```
 
 # Sample with GitLab CI/CD
@@ -140,7 +140,7 @@ Note: I highly recommend to use ssh instead of https because of the username/pas
 
 ```yaml
 # .gitsplit.yml
-cache_dir: "cache/gitsplit"
+cache_url: "cache/gitsplit"
 splits:
   - prefix: "src/partA"
     target: "git@gitlab.com:my_company/project-partA.git"

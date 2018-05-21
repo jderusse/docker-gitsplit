@@ -66,7 +66,7 @@ func getFlagName(referenceName string, split Split) string {
 
 func (c *CachePool) Load() error {
 	if err := c.remote.FetchFile("splitsh", "splitsh.db", filepath.Join(c.workingSpacePath, "splitsh.db")); err != nil {
-		return errors.Wrap(err, "Fail to fetch cache")
+		return errors.Wrap(err, "failed to fetch cache")
 	}
 	log.Info("Cache loaded")
 
@@ -79,7 +79,7 @@ func (c *CachePool) Dump() error {
 	}
 
 	if err := c.remote.PushFile("splitsh.db", filepath.Join(c.workingSpacePath, "splitsh.db"), "Update splitsh cache", "splitsh"); err != nil {
-		return errors.Wrap(err, "Fail to save cache")
+		return errors.Wrap(err, "failed to save cache")
 	}
 	log.Info("Cache dumped")
 
@@ -93,12 +93,12 @@ func (c *CachePool) Push() {
 func (c *CachePool) SaveItem(item *CacheItem) error {
 	if item.SourceId() != nil {
 		if err := c.remote.AddReference("source-"+item.flagName, item.SourceId()); err != nil {
-			return errors.Wrapf(err, "Unable to create source reference %s targeting %s", item.flagName, item.SourceId())
+			return errors.Wrapf(err, "failed to create source reference %s for %s", item.flagName, item.SourceId())
 		}
 	}
 	if item.TargetId() != nil {
 		if err := c.remote.AddReference("target-"+item.flagName, item.TargetId()); err != nil {
-			return errors.Wrapf(err, "Unable to create target reference %s targeting %s", item.flagName, item.TargetId())
+			return errors.Wrapf(err, "failed to create target reference %s for %s", item.flagName, item.TargetId())
 		}
 	}
 

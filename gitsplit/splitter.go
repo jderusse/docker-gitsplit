@@ -40,7 +40,7 @@ func (s *Splitter) Split(whitelistReferences []string) error {
 
 	references, err := remote.GetReferences()
 	if err != nil {
-		return errors.Wrap(err, "Fail to read source references")
+		return errors.Wrap(err, "failed to split references")
 	}
 	for _, reference := range references {
 		for _, referencePattern := range s.config.Origins {
@@ -54,14 +54,14 @@ func (s *Splitter) Split(whitelistReferences []string) error {
 
 			for _, split := range s.config.Splits {
 				if err := s.splitReference(reference, split); err != nil {
-					return errors.Wrap(err, "Fail to split references")
+					return errors.Wrap(err, "failed to split references")
 				}
 			}
 		}
 	}
 
 	if err := s.workingSpace.Remotes().Flush(); err != nil {
-		return errors.Wrap(err, "Fail to flush references")
+		return errors.Wrap(err, "failed to flush references")
 	}
 	return nil
 }
@@ -71,32 +71,37 @@ func (s *Splitter) splitReference(reference Reference, split Split) error {
 
 	previousReference, err := s.cachePool.GetItem(reference.Name, split)
 	if err != nil {
-		return errors.Wrap(err, "Fail to fetch previousReference metadata")
+		return errors.Wrap(err, "failed to fetch previous state")
 	}
 
+	contextualLog := log.WithFields(log.Fields{
+	    "reference": reference.Alias,
+	    "splits": split.Prefixes,
+	})
+
 	if previousReference.IsFresh(reference) {
-		log.Info("Already splitted " + reference.Alias + " for " + strings.Join(split.Prefixes, ", "))
+		contextualLog.Info("Already splitted")
 	} else {
-		log.Warn("Splitting " + reference.Alias + " for " + strings.Join(split.Prefixes, ", "))
+		contextualLog.Warn("Splitting")
 		tempReference, err := s.workingSpace.Repository().References.Create(flagTemp, reference.Id, true, "Temporary reference")
 		if err != nil {
-			return errors.Wrapf(err, "Unable to create temporary reference %s", flagTemp)
+			return errors.Wrapf(err, "failed to create temporary reference %s", flagTemp)
 		}
 		defer tempReference.Free()
 
 		splitId, err := s.referenceSplitter.Split(flagTemp, split.Prefixes)
 		if err != nil {
-			return errors.Wrap(err, "Unable split reference")
+			return errors.Wrap(err, "failed to split reference")
 		}
 
 		err = tempReference.Delete()
 		if err != nil {
-			return errors.Wrapf(err, "Unable to delete temporary reference %s", flagTemp)
+			return errors.Wrapf(err, "failed to delete temporary reference %s", flagTemp)
 		}
 
 		previousReference.Set(reference.Id, splitId)
 		if err := s.cachePool.SaveItem(previousReference); err != nil {
-			return errors.Wrapf(err, "Fail to cache reference %s", flagTemp)
+			return errors.Wrapf(err, "failed to cache reference %s", flagTemp)
 		}
 	}
 

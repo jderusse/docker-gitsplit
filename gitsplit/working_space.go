@@ -25,7 +25,7 @@ func NewWorkingSpaceFactory() *WorkingSpaceFactory {
 func (w *WorkingSpaceFactory) CreateWorkingSpace(config Config) (*WorkingSpace, error) {
 	repository, err := w.getRepository(config)
 	if err != nil {
-		return nil, errors.Wrap(err, "Fail to create working repository")
+		return nil, errors.Wrap(err, "failed to create working repository")
 	}
 
 	workingSpace := &WorkingSpace{
@@ -35,35 +35,34 @@ func (w *WorkingSpaceFactory) CreateWorkingSpace(config Config) (*WorkingSpace, 
 	}
 
 	if err := workingSpace.Init(); err != nil {
-		return nil, errors.Wrap(err, "Fail to initialize workingSpace")
+		return nil, err
 	}
 
 	return workingSpace, nil
 }
 
 func (w *WorkingSpaceFactory) getRepository(config Config) (*git.Repository, error) {
-	if config.CacheUrl != nil && config.CacheUrl.IsLocal() && !utils.FileExists(config.CacheUrl.SchemelessUrl()) {
-		repository, err := git.InitRepository(config.CacheUrl.SchemelessUrl(), true)
-		if err != nil {
-			return nil, errors.Wrap(err, "Fail to initialize cache repository")
-		}
-		repository.Free()
-	}
-
 	repoPath, err := ioutil.TempDir("", "gitsplit_")
 	if err != nil {
-		return nil, errors.Wrap(err, "Fail to create working directory")
+		return nil, errors.Wrap(err, "failed to create working directory")
 	}
-	log.Info("Working on ", repoPath)
-	if config.CacheUrl != nil && config.CacheUrl.IsLocal() && utils.FileExists(config.CacheUrl.SchemelessUrl()) {
+	if config.CacheUrl != nil && config.CacheUrl.IsLocal() {
+		repository, err := git.InitRepository(config.CacheUrl.SchemelessUrl(), true)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to initialize cache repository")
+		}
+		repository.Free()
+
 		if err := utils.Copy(config.CacheUrl.SchemelessUrl(), repoPath); err != nil {
-			return nil, errors.Wrap(err, "Fail to create working space from cache")
+			return nil, errors.Wrap(err, "failed to create working space from cache")
 		}
 
 		return git.OpenRepository(repoPath)
 	}
 
-	log.Infof("Initializing repository %s", repoPath)
+	log.WithFields(log.Fields{
+	    "path": repoPath,
+	}).Info("Create new repository")
 	return git.InitRepository(repoPath, true)
 }
 
@@ -74,7 +73,7 @@ func (w *WorkingSpace) GetCachePool() (CachePoolInterface, error) {
 
 	remote, err := w.Remotes().Get("cache")
 	if err != nil {
-		return nil, errors.Wrap(err, "Fail to create cache pool")
+		return nil, errors.Wrap(err, "failed to create cache pool")
 	}
 
 	return NewCachePool(w.repository.Path(), remote), nil
@@ -90,10 +89,12 @@ func (w *WorkingSpace) Remotes() *GitRemoteCollection {
 
 func (w *WorkingSpace) Init() error {
 	if w.config.CacheUrl != nil && !utils.FileExists(w.config.CacheUrl.SchemelessUrl()) {
-		log.Infof("Initializing repository %s", w.config.CacheUrl.SchemelessUrl())
+		log.WithFields(log.Fields{
+		    "path": w.config.CacheUrl.SchemelessUrl(),
+		}).Info("Initializing repository")
 		repository, err := git.InitRepository(w.config.CacheUrl.SchemelessUrl(), true)
 		if err != nil {
-			return errors.Wrap(err, "Fail to initialize cache repository")
+			return errors.Wrap(err, "failed to initialize working space")
 		}
 		repository.Free()
 	}

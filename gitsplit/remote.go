@@ -65,7 +65,9 @@ func (r *GitRemoteCollection) Clean() {
 
 	for _, remoteId := range remotes {
 		if !utils.InArray(knownRemotes, remoteId) {
-			log.Info("Removing remote ", remoteId)
+			log.WithFields(log.Fields{
+			    "remote": remoteId,
+			}).Info("Removing remote")
 			r.repository.Remotes.Delete(remoteId)
 		}
 	}
@@ -119,11 +121,11 @@ func (r *GitRemote) Init() error {
 
 	if !utils.InArray(remotes, r.id) {
 		if _, err := r.repository.Remotes.Create(r.id, os.ExpandEnv(r.url)); err != nil {
-			return errors.Wrapf(err, "Fail to create remote %s", r.alias)
+			return errors.Wrapf(err, "failed to create remote %s", r.alias)
 		}
 	} else {
 		if err := r.repository.Remotes.SetUrl(r.id, os.ExpandEnv(r.url)); err != nil {
-			return errors.Wrapf(err, "Fail to update remote %s", r.alias)
+			return errors.Wrapf(err, "failed to update remote %s", r.alias)
 		}
 	}
 
@@ -133,7 +135,7 @@ func (r *GitRemote) Init() error {
 func (r *GitRemote) GetReference(alias string) (*Reference, error) {
 	references, err := r.GetReferences()
 	if err != nil {
-		return nil, errors.Wrap(err, "Unable to get reference")
+		return nil, errors.Wrap(err, "failed to get reference")
 	}
 
 	for _, reference := range references {
@@ -153,7 +155,7 @@ func (r *GitRemote) AddReference(alias string, id *git.Oid) error {
 	for _, ref := range r.refs {
 		reference, err := r.repository.References.Create(fmt.Sprintf("refs/remotes/%s/%s/%s", r.id, ref, alias), id, true, "")
 		if err != nil {
-			return errors.Wrap(err, "Fail to add reference")
+			return errors.Wrap(err, "failed to add reference")
 		}
 		defer reference.Free()
 	}
@@ -188,7 +190,7 @@ func (r *GitRemote) GetReferences() ([]Reference, error) {
 func (r *GitRemote) getRemoteReferences() ([]Reference, error) {
 	result, err := utils.GitExec(r.repository.Path(), "ls-remote", r.id)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Fail to fetch references of %s", r.alias)
+		return nil, errors.Wrapf(err, "failed to fetch references of %s", r.alias)
 	}
 
 	references := []Reference{}
@@ -203,7 +205,7 @@ func (r *GitRemote) getRemoteReferences() ([]Reference, error) {
 		}
 		columns := strings.Split(line, "\t")
 		if len(columns) != 2 {
-			return nil, fmt.Errorf("Fail to parse reference %s: 2 columns expected", line)
+			return nil, fmt.Errorf("failed to parse reference %s: 2 columns expected", line)
 		}
 		referenceId := columns[0]
 		referenceName := columns[1]
@@ -214,7 +216,7 @@ func (r *GitRemote) getRemoteReferences() ([]Reference, error) {
 
 		oid, err := git.NewOid(referenceId)
 		if err != nil {
-			return nil, errors.Wrapf(err, "Fail to parse reference %s", line)
+			return nil, errors.Wrapf(err, "failed to parse reference %s", line)
 		}
 
 		references = append(references, Reference{
@@ -231,7 +233,7 @@ func (r *GitRemote) getRemoteReferences() ([]Reference, error) {
 func (r *GitRemote) getLocalReferences() ([]Reference, error) {
 	iterator, err := r.repository.NewReferenceIteratorGlob(fmt.Sprintf("refs/remotes/%s/*", r.id))
 	if err != nil {
-		return nil, errors.Wrap(err, "Fail to fetch references")
+		return nil, errors.Wrap(err, "failed to fetch references")
 	}
 
 	defer iterator.Free()
@@ -259,11 +261,13 @@ func (r *GitRemote) getLocalReferences() ([]Reference, error) {
 
 func (r *GitRemote) Fetch() {
 	r.pool.Push(func() (interface{}, error) {
-		log.Warn("Fetching from remote ", r.alias)
-
+		log.WithFields(log.Fields{
+		    "remote": r.alias,
+		    "refs": r.refs,
+		}).Warn("Fetching from remote")
 		for _, ref := range r.refs {
 			if _, err := utils.GitExec(r.repository.Path(), "fetch", "--force", "--prune", r.id, fmt.Sprintf("refs/%s/*:refs/remotes/%s/%s/*", ref, r.id, ref)); err != nil {
-				return nil, errors.Wrapf(err, "Fail to update cache of %s", r.alias)
+				return nil, errors.Wrapf(err, "failed to update cache of %s", r.alias)
 			}
 		}
 
@@ -275,9 +279,12 @@ func (r *GitRemote) Fetch() {
 
 func (r *GitRemote) PushRef(refs string) {
 	r.pool.Push(func() (interface{}, error) {
-		log.Warn("Pushing " + refs + " into " + r.alias)
+		log.WithFields(log.Fields{
+		    "remote": r.alias,
+		    "refs": refs,
+		}).Warn("Pushing to remote")
 		if _, err := utils.GitExec(r.repository.Path(), "push", "--force", r.id, refs); err != nil {
-			return nil, errors.Wrap(err, "Fail to push")
+			return nil, errors.Wrapf(err, "failed to push reference %s", refs)
 		}
 
 		return nil, nil
@@ -293,16 +300,20 @@ func (r *GitRemote) PushAll() {
 func (r *GitRemote) Push(reference Reference, splitId *git.Oid) error {
 	references, err := r.GetReferences()
 	if err != nil {
-		return errors.Wrapf(err, "Fail to get references for remote %s", r.alias)
+		return errors.Wrapf(err, "failed to get references for remote %s", r.alias)
 	}
 
 	for _, remoteReference := range references {
 		if remoteReference.Alias == reference.Alias {
 			if remoteReference.Id.Equal(splitId) {
-				log.Info("Already pushed " + reference.Alias + " into " + r.alias)
+				log.WithFields(log.Fields{
+				    "remote": r.alias,
+				}).Info("Already pushed " + reference.Alias)
 				return nil
 			}
-			log.Warn("Out of date " + reference.Alias + " for " + r.alias)
+			log.WithFields(log.Fields{
+			    "remote": r.alias,
+			}).Warn("Out of date " + reference.Alias)
 			break
 		}
 	}
@@ -315,38 +326,38 @@ func (r *GitRemote) Push(reference Reference, splitId *git.Oid) error {
 func (r *GitRemote) FetchFile(referenceName string, fileName string, filePath string) error {
 	reference, err := r.GetReference("splitsh")
 	if err != nil {
-		return errors.Wrapf(err, "Fail to fetch file reference %s", referenceName)
+		return errors.Wrapf(err, "failed to fetch file reference %s", referenceName)
 	}
 	if reference == nil {
 		return nil
 	}
 	commit, err := r.repository.LookupCommit(reference.Id)
 	if err != nil {
-		return errors.Wrapf(err, "Failed to find commit %s", reference.Id)
+		return errors.Wrapf(err, "failed to find commit %s", reference.Id)
 	}
 	defer commit.Free()
 	tree, err := commit.Tree()
 	if err != nil {
-		return errors.Wrapf(err, "Failed to fetch commit tree")
+		return errors.Wrapf(err, "failed to fetch commit tree")
 	}
 	defer tree.Free()
 	entry, err := tree.EntryByPath(fileName)
 	if err != nil {
-		return errors.Wrapf(err, "Failed to fetch file from tree")
+		return errors.Wrapf(err, "failed to fetch file from tree")
 	}
 
 	odb, err := r.repository.Odb()
 	if err != nil {
-		return errors.Wrap(err, "Failed to open odb")
+		return errors.Wrap(err, "failed to open odb")
 	}
 	defer odb.Free()
 	object, err := odb.Read(entry.Id)
 	if err != nil {
-		return errors.Wrap(err, "Failed to read from odb")
+		return errors.Wrap(err, "failed to read from odb")
 	}
 	defer object.Free()
 	if err := ioutil.WriteFile(filePath, object.Data(), os.FileMode(entry.Filemode)); err != nil {
-		return errors.Wrapf(err, "Failed to write file %s", filePath)
+		return errors.Wrapf(err, "failed to write file %s", filePath)
 	}
 
 	return nil
@@ -355,39 +366,39 @@ func (r *GitRemote) FetchFile(referenceName string, fileName string, filePath st
 func (r *GitRemote) PushFile(fileName string, filePath string, message string, referenceName string) error {
 	treeBuilder, err := r.repository.TreeBuilder()
 	if err != nil {
-		return errors.Wrap(err, "Failed to create treeBuilder")
+		return errors.Wrap(err, "failed to create treeBuilder")
 	}
 	defer treeBuilder.Free()
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		return errors.Wrap(err, "Failed to open file")
+		return errors.Wrap(err, "failed to open file")
 	}
 	defer file.Close()
 	content, err := ioutil.ReadAll(file)
 	if err != nil {
-		return errors.Wrap(err, "Failed to read file")
+		return errors.Wrap(err, "failed to read file")
 	}
 	odb, err := r.repository.Odb()
 	if err != nil {
-		return errors.Wrap(err, "Failed to open odb")
+		return errors.Wrap(err, "failed to open odb")
 	}
 	blobId, err := odb.Write(content, git.ObjectBlob)
 	if err != nil {
-		return errors.Wrap(err, "Failed to write in odb")
+		return errors.Wrap(err, "failed to write in odb")
 	}
 	if err = treeBuilder.Insert(fileName, blobId, git.FilemodeBlob); err != nil {
-		return errors.Wrap(err, "Failed to insert tree")
+		return errors.Wrap(err, "failed to insert tree")
 	}
 
 	treeID, err := treeBuilder.Write()
 	if err != nil {
-		return errors.Wrap(err, "Failed to write tree")
+		return errors.Wrap(err, "failed to write tree")
 	}
 
 	tree, err := r.repository.LookupTree(treeID)
 	if err != nil {
-		return errors.Wrap(err, "Failed to find tree")
+		return errors.Wrap(err, "failed to find tree")
 	}
 	defer tree.Free()
 
@@ -415,7 +426,7 @@ func (r *GitRemote) replaceFile(reference *Reference, message string, tree *git.
 
 	commit, err := r.repository.LookupCommit(reference.Id)
 	if err != nil {
-		return errors.Wrapf(err, "Failed to find commit %s", reference.Id)
+		return errors.Wrapf(err, "failed to find commit %s", reference.Id)
 	}
 
 	sig := r.GetSignature()
