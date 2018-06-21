@@ -2,6 +2,8 @@
 
 See [the official site](https://github.com/splitsh/lite) for more information about splitsh.
 
+Demo available here [jderusse/test-split-a](https://github.com/jderusse/test-split-a).
+
 # Usage
 
 Include a `.gitsplit.yml` file in the root of your repository.
@@ -12,11 +14,19 @@ Use env variable to inject your credential and manage authentication.
 Example `.gitsplit.yml` configuration:
 
 ```yaml
-# Used to speed up the split over time by reusing git's objects
-cache_dir: "/cache/gitsplit"
+# Path to a cache directory Used to speed up the split over time by reusing git's objects
+cache_url: "/cache/gitsplit"
+# cache_url: "file:///cache/gitsplit"
+# cache_url: "https://${GH_TOKEN}@github.com/my_company/project-cache.git"
+# cache_url: "git@gitlab.com:my_company/project-cache.git"
 
 # Path to the repository to split (default = current path)
-project_dir: /home/me/workspace/another_project
+# project_url: /home/me/workspace/another_project
+# project_url: ~/workspace/another_project
+# project_url: ../another_project
+# project_url: file://~/workspace/another_project
+# project_url: "https://${GH_TOKEN}@github.com/my_company/project.git"
+# project_url: "git@gitlab.com:my_company/project.git"
 
 # List of splits.
 splits:
@@ -29,8 +39,8 @@ splits:
       - "https://${GH_TOKEN}@github.com/my_company/project-partZ.git"
   - prefix:
       # You can use several prefix in the split
-      - "src/subTree/PartC"
-      - "src/subTree/PartZ"
+      - "src/subTree/PartC:"
+      - "src/subTree/PartZ:lib/z"
     target: "https://${GH_TOKEN}@github.com/my_company/project-partC.git"
 
 # List of references to split (defined as regexp)
@@ -60,18 +70,12 @@ It could be a security issue. Use environments variables as defined in the offic
 
 ```yaml
 # .gitsplit.yml
-cache_dir: "/cache/gitsplit"
+cache_url: "/cache/gitsplit"
 splits:
   - prefix: "src/partA"
     target: "https://${GH_TOKEN}@github.com/my_company/project-partA.git"
-  - prefix: "src/partB"
-    target: "https://${GH_TOKEN}@github.com/my_company/project-partB.git"
-  - prefix: "src/subTree/PartC"
-    target: "https://${GH_TOKEN}@github.com/my_company/project-partC.git"
-
 origins:
   - ^master$
-  - ^develop$
 ```
 
 ```yaml
@@ -88,7 +92,7 @@ pipeline:
       - /drone/env/gitsplit.ssh:/root/.ssh/
     commands:
       # have to fetch remote branches
-      - git fetch
+      - git fetch --prune --unshallow || true
       - gitsplit
 ```
 
@@ -99,18 +103,12 @@ It could be a security issue. Use environments variables as defined in the offic
 
 ```yaml
 # .gitsplit.yml
-cache_dir: "/cache/gitsplit"
+cache_url: "/cache/gitsplit"
 splits:
   - prefix: "src/partA"
     target: "https://${GH_TOKEN}@github.com/my_company/project-partA.git"
-  - prefix: "src/partB"
-    target: "https://${GH_TOKEN}@github.com/my_company/project-partB.git"
-  - prefix: "src/subTree/PartC"
-    target: "https://${GH_TOKEN}@github.com/my_company/project-partC.git"
-
 origins:
   - ^master$
-  - ^develop$
 ```
 
 ```yaml
@@ -127,10 +125,10 @@ install:
   # update local repository. Because travis fetch a shallow copy
   - git config remote.origin.fetch "+refs/*:refs/*"
   - git config remote.origin.mirror true
-  - git fetch --unshallow
+  - git fetch --prune --unshallow || true
 
 script:
-  - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit --ref "${TRAVIS_BRANCH}"
+  - docker run --rm -t -e GH_TOKEN -v /cache/gitsplit:/cache/gitsplit -v ${PWD}:/srv jderusse/gitsplit gitsplit --ref "${TRAVIS_BRANCH}"
 ```
 
 # Sample with GitLab CI/CD
@@ -142,18 +140,12 @@ Note: I highly recommend to use ssh instead of https because of the username/pas
 
 ```yaml
 # .gitsplit.yml
-cache_dir: "cache/gitsplit"
+cache_url: "cache/gitsplit"
 splits:
   - prefix: "src/partA"
     target: "git@gitlab.com:my_company/project-partA.git"
-  - prefix: "src/partB"
-    target: "git@gitlab.com:my_company/project-partB.git"
-  - prefix: "src/subTree/PartC"
-    target: "git@gitlab.com:my_company/project-partC.git"
-
 origins:
   - ^master$
-  - ^develop$
 ```
 
 ```yaml
@@ -180,6 +172,6 @@ split:
   script:
     - git config remote.origin.fetch "+refs/*:refs/*"
     - git config remote.origin.mirror true
-    - git fetch
+    - git fetch --prune --unshallow || true
     - gitsplit --ref "${CI_COMMIT_REF_NAME}"
 ```
