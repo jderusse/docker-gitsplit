@@ -5,12 +5,17 @@ RUN apk add --no-cache \
 
 RUN go get -d github.com/libgit2/git2go
 RUN cd $GOPATH/src/github.com/libgit2/git2go \
+ && git checkout v27 \
  && git submodule update --init
 
 RUN apk add --no-cache \
         make\
         cmake \
-        g++
+        g++ \
+        libressl-dev \
+        libssh2-dev \
+        libgit2-dev
+
 RUN cd $GOPATH/src/github.com/libgit2/git2go \
  && make install-static
 
