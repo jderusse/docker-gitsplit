@@ -5,7 +5,6 @@ RUN apk add --no-cache \
 
 RUN go get -d github.com/libgit2/git2go
 RUN cd $GOPATH/src/github.com/libgit2/git2go \
- && git checkout next \
  && git submodule update --init
 
 RUN apk add --no-cache \
@@ -13,7 +12,7 @@ RUN apk add --no-cache \
         cmake \
         g++
 RUN cd $GOPATH/src/github.com/libgit2/git2go \
- && make install
+ && make install-static
 
 COPY . /go/src/github.com/jderusse/gitsplit/
 
