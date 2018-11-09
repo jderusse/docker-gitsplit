@@ -5,24 +5,22 @@ RUN apk add --no-cache \
 
 RUN go get -d github.com/libgit2/git2go
 RUN cd $GOPATH/src/github.com/libgit2/git2go \
- && git checkout v27 \
  && git submodule update --init
 
 RUN apk add --no-cache \
         make\
         cmake \
         g++ \
-        libressl-dev \
-        libssh2-dev \
-        libgit2-dev
+        openssl-dev \
+        libssh2-dev
 
 RUN cd $GOPATH/src/github.com/libgit2/git2go \
  && make install-static
 
 COPY . /go/src/github.com/jderusse/gitsplit/
 
-RUN go get github.com/jderusse/gitsplit
-RUN go build -o gitsplit github.com/jderusse/gitsplit
+RUN go get --tags "static" github.com/jderusse/gitsplit
+RUN go build --tags "static" -o gitsplit github.com/jderusse/gitsplit
 
 # ==================================================
 
@@ -30,6 +28,7 @@ FROM alpine
 
 RUN apk add --no-cache \
         git \
+        openssl \
         openssh-client \
         ca-certificates
 
