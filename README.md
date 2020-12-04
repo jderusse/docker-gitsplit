@@ -175,3 +175,38 @@ split:
     - git fetch --prune --unshallow || git fetch --prune
     - gitsplit --ref "${CI_COMMIT_REF_NAME}"
 ```
+
+# Sample with Github Actions
+
+I recommend to not use [the checkout action](https://github.com/actions/checkout) because it will checkout only the last
+commit for performance purpose. In this example we clone the whole repository. Indeed, if you need to split only the
+last changes and you don't need to split tags, you can use it.
+
+Also we do not use the GH Action auto-generated token because it doesn't have the required permissions for gitsplit to
+work. You need to be able to write on all repositories you will split onto, you can create one by using following
+link: [https://github.com/settings/tokens/new?scopes=repo,workflow&description=gitsplit](https://github.com/settings/tokens/new?scopes=repo,workflow&description=gitsplit)
+
+In this example I trigger the gitsplit on main branch push and on Github release (tags), feel free to make it your way !
+
+```yaml
+name: gitsplit
+on:
+  push:
+    branches:
+      - main
+  release:
+    types: [published]
+
+jobs:
+  gitsplit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        run: git clone https://github.com/org/project /home/runner/work/org/project && cd /home/runner/work/org/project
+      - name: Split repositories
+        uses: docker://jderusse/gitsplit:latest
+        with:
+          args: gitsplit
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
+```
