@@ -30,7 +30,8 @@ RUN apk add --no-cache \
         git \
         openssl \
         openssh-client \
-        ca-certificates
+        ca-certificates \
+        libssh2-dev
 
 COPY --from=build /go/gitsplit /bin/gitsplit
 
