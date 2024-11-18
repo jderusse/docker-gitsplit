@@ -186,6 +186,12 @@ Also we do not use the GH Action auto-generated token because it doesn't have th
 work. You need to be able to write on all repositories you will split onto, you can create one by using following
 link: [https://github.com/settings/tokens/new?scopes=repo,workflow&description=gitsplit](https://github.com/settings/tokens/new?scopes=repo,workflow&description=gitsplit)
 
+If you want a fine grained token, you can create one with the following scopes:
+
+  * https://github.com/settings/personal-access-tokens/new
+  * all repo
+  * repo > content > read write
+
 In this example I trigger the gitsplit on main branch push and on Github release (tags), feel free to make it your way !
 
 ```yaml
